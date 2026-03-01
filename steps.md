@@ -40,38 +40,40 @@ Before conversion, preprocess the approved image to maximize trace quality:
 
 ---
 
-## Step 4: Image → SVG Conversion
+## Step 4: Image → SVG Conversion ✅
 
-- Use Inkscape (or Potrace) server-side to autotrace the preprocessed image into an SVG
-- Return the raw SVG output for the next check
-
----
-
-## Step 5: OpenCLAW Check #1 — SVG Review & Edit
-
-- Pass the SVG to **OpenCLAW Check #1**
-- OpenCLAW reviews the SVG for quality issues: excess nodes, shapes too fine to stitch, color problems, trace artifacts
-- **If approved:** SVG passes through as-is
-- **If issues found:** OpenCLAW automatically edits the SVG to correct the problems
-- Output is a clean, stitch-ready SVG
+- ✅ Use vtracer server-side to autotrace the preprocessed image into an SVG
+- ✅ Return the raw SVG output for the next check
 
 ---
 
-## Step 6: SVG → DST Conversion
+## Step 5: OpenCLAW Check #1 — SVG Review & Edit ✅
 
-- Pass the approved/edited SVG to **Inkscape with Ink/Stitch** via a server-side subprocess call
-- Ink/Stitch converts the SVG into a `.dst` embroidery file
-- Configure stitch density, underlay, and pull compensation as defaults
+- ✅ Pass the SVG to **OpenCLAW Check #1** via Discord agent integration
+- ✅ OpenCLAW reviews the SVG for quality issues: excess nodes, shapes too fine to stitch, color problems, trace artifacts
+- ✅ **If approved:** SVG passes through as-is
+- ✅ **If issues found:** OpenCLAW automatically edits the SVG to correct the problems
+- ✅ Output is a clean, stitch-ready SVG
+- ✅ 5-minute polling timeout with graceful fallback to original SVG
 
 ---
 
-## Step 7: OpenCLAW Check #2 — DST Review & Edit
+## Step 6: SVG → DST Conversion ✅
 
-- Pass the DST file to **OpenCLAW Check #2**
-- OpenCLAW reviews the DST for embroidery-specific issues: bad jump stitches, incorrect stitch density, elements too small to physically stitch, color stop order, underlay problems
-- **If approved:** DST is finalized as-is
-- **If issues found:** OpenCLAW automatically adjusts the DST file
-- Output is the final, machine-ready DST file
+- ✅ Convert preprocessed image to DST via scanline fill stitch generation (pyembroidery)
+- ✅ Generate fill stitches with configurable density (0.4mm row spacing, 3.5mm max stitch)
+- ✅ Map quantized colors to thread colors with proper COLOR_CHANGE commands
+
+---
+
+## Step 7: OpenCLAW Check #2 — DST Review & Edit ✅
+
+- ✅ Pass the DST file to **OpenCLAW Check #2** via Discord agent integration
+- ✅ OpenCLAW reviews the DST for embroidery-specific issues: bad jump stitches, incorrect stitch density, elements too small to physically stitch, color stop order, underlay problems
+- ✅ **If approved:** DST is finalized as-is
+- ✅ **If issues found:** OpenCLAW automatically adjusts the DST file
+- ✅ Output is the final, machine-ready DST file
+- ✅ 5-minute polling timeout with graceful fallback to original DST
 
 ---
 

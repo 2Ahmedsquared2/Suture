@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useEffect, Suspense, useCallback } from "react";
+import { useState, useEffect, Suspense, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import ContourGraphic from "@/components/ContourGraphic";
+import GarmentMockup from "@/components/GarmentMockup";
+import { useAuth } from "@/context/AuthContext";
+import AuthGuard from "@/components/AuthGuard";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -16,8 +19,6 @@ type PipelineState =
   | "done"
   | "error";
 
-type ViewTab = "original" | "preprocessed" | "svg";
-
 interface ThreadColor {
   r: number;
   g: number;
@@ -25,22 +26,17 @@ interface ThreadColor {
   hex: string;
 }
 
-const STEP_LABELS: Record<string, string> = {
-  background_removed: "Background removed",
-  normalized_resolution: "Resolution normalized",
-  contrast_sharpness_boosted: "Contrast & sharpness boosted",
-  colors_simplified: "Colors simplified for stitching",
-};
-
 function CanvasContent() {
   const searchParams = useSearchParams();
+  const { token } = useAuth();
   const imageId = searchParams.get("imageId");
   const imageUrl = searchParams.get("imageUrl") ?? null;
+  const promptParam = searchParams.get("prompt") ?? null;
+  const savedRef = useRef(false);
 
   const [pipelineState, setPipelineState] = useState<PipelineState>("idle");
   const [preprocessedUrl, setPreprocessedUrl] = useState<string | null>(null);
   const [preprocessedId, setPreprocessedId] = useState<string | null>(null);
-  const [stepsApplied, setStepsApplied] = useState<string[]>([]);
   const [svgUrl, setSvgUrl] = useState<string | null>(null);
   const [dstUrl, setDstUrl] = useState<string | null>(null);
   const [dstId, setDstId] = useState<string | null>(null);
@@ -49,24 +45,15 @@ function CanvasContent() {
   const [dimensionsMm, setDimensionsMm] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [errorStage, setErrorStage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<ViewTab>("svg");
-  const [prompt, setPrompt] = useState("");
   const [svgId, setSvgId] = useState<string | null>(null);
   const [agentFeedback, setAgentFeedback] = useState<string | null>(null);
   const [svgReviewed, setSvgReviewed] = useState(false);
   const [dstReviewed, setDstReviewed] = useState(false);
 
-  // Manufacturing quote state
-  const [showQuoteForm, setShowQuoteForm] = useState(false);
-  const [quoteGarment, setQuoteGarment] = useState("t-shirt");
-  const [quoteQuantity, setQuoteQuantity] = useState(25);
-  const [quoteResult, setQuoteResult] = useState<{
-    unit_price: number;
-    total_price: number;
-    turnaround_days: number;
-    notes: string;
-  } | null>(null);
-  const [quoteLoading, setQuoteLoading] = useState(false);
+  // DST stitch preview
+  const [showDstPreview, setShowDstPreview] = useState(false);
+  const [dstPreviewUrl, setDstPreviewUrl] = useState<string | null>(null);
+  const [dstPreviewLoading, setDstPreviewLoading] = useState(false);
 
   const runDstReview = useCallback(async (dstIdVal: string, svgIdVal: string) => {
     setPipelineState("reviewing_dst");
@@ -152,7 +139,6 @@ function CanvasContent() {
       setSvgUrl(`${API}${data.svg_url}`);
       setSvgReviewed(data.reviewed);
       if (data.agent_feedback) setAgentFeedback(data.agent_feedback);
-      setActiveTab("svg");
 
       await runDstConversion(imageIdVal, data.svg_id);
     } catch (err) {
@@ -183,7 +169,6 @@ function CanvasContent() {
         const data = await res.json();
         setSvgId(data.svg_id);
         setSvgUrl(`${API}${data.svg_url}`);
-        setActiveTab("svg");
 
         await runSvgReview(data.svg_id, sourceImageId);
       } catch (err) {
@@ -218,7 +203,6 @@ function CanvasContent() {
       const data = await res.json();
       setPreprocessedId(data.preprocessed_image_id);
       setPreprocessedUrl(`${API}${data.preprocessed_image_url}`);
-      setStepsApplied(data.steps_applied);
 
       await runSvgConversion(data.preprocessed_image_id);
     } catch (err) {
@@ -239,6 +223,37 @@ function CanvasContent() {
     }
   }, [imageId, pipelineState, runPreprocessing]);
 
+  useEffect(() => {
+    if (pipelineState !== "done" || savedRef.current || !token) return;
+    savedRef.current = true;
+
+    fetch(`${API}/sutures`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        prompt: promptParam,
+        original_image_url: imageUrl ? imageUrl : null,
+        preprocessed_image_url: preprocessedUrl,
+        svg_url: svgUrl,
+        dst_url: dstUrl,
+        dst_id: dstId,
+        stitch_count: stitchCount,
+        dimensions_mm: dimensionsMm.length ? dimensionsMm : null,
+        thread_colors: threadColors,
+        svg_reviewed: svgReviewed,
+        dst_reviewed: dstReviewed,
+        agent_feedback: agentFeedback,
+      }),
+    }).catch(() => {});
+  }, [
+    pipelineState, token, promptParam, imageUrl, preprocessedUrl,
+    svgUrl, dstUrl, dstId, stitchCount, dimensionsMm,
+    threadColors, svgReviewed, dstReviewed, agentFeedback,
+  ]);
+
   const handleRetry = () => {
     if (errorStage === "review_dst" && dstId && svgId) {
       runDstReview(dstId, svgId);
@@ -253,42 +268,37 @@ function CanvasContent() {
     }
   };
 
-  const handleGetQuote = async () => {
-    setQuoteLoading(true);
-    setQuoteResult(null);
-    try {
-      const res = await fetch(`${API}/manufacturing-quote`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          garment: quoteGarment,
-          quantity: quoteQuantity,
-          stitch_count: stitchCount,
-          thread_colors: threadColors.length,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setQuoteResult(data);
+  const handleToggleDstPreview = async () => {
+    if (showDstPreview) {
+      setShowDstPreview(false);
+      return;
+    }
+    setShowDstPreview(true);
+
+    if (!dstPreviewUrl && preprocessedId) {
+      setDstPreviewLoading(true);
+      try {
+        const res = await fetch(`${API}/dst-preview`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image_id: preprocessedId }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setDstPreviewUrl(`${API}${data.preview_url}`);
+          if (data.thread_colors) setThreadColors(data.thread_colors);
+          if (data.stitch_count) setStitchCount(data.stitch_count);
+          if (data.dimensions_mm) setDimensionsMm(data.dimensions_mm);
+        }
+      } catch {
+        /* preview is non-critical */
+      } finally {
+        setDstPreviewLoading(false);
       }
-    } catch {
-      /* ignore for now */
-    } finally {
-      setQuoteLoading(false);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!prompt.trim()) return;
-  };
-
-  const tabUrl =
-    activeTab === "original"
-      ? imageUrl
-      : activeTab === "preprocessed"
-        ? preprocessedUrl
-        : svgUrl;
+  const designUrl = preprocessedUrl || (imageUrl ? `${API}${imageUrl}` : null);
 
   const isLoading =
     pipelineState === "preprocessing" ||
@@ -312,12 +322,12 @@ function CanvasContent() {
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-background">
-      <div className="grid-canvas relative flex-1 overflow-hidden">
+      <div className="grid-canvas relative flex-1 overflow-y-auto">
         <div className="pointer-events-none absolute -bottom-24 -right-16 w-[42vw] max-w-[550px] opacity-20">
           <ContourGraphic width={550} height={550} lineCount={18} />
         </div>
 
-        <div className="flex h-full items-center justify-center pt-16">
+        <div className="flex min-h-full flex-col items-center justify-center px-4 pt-20 pb-10">
           {/* Loading states */}
           {isLoading && (
             <div className="flex flex-col items-center gap-5">
@@ -340,7 +350,8 @@ function CanvasContent() {
               )}
               {pipelineState === "reviewing_svg" && (
                 <p className="text-xs text-foreground/20">
-                  OpenCLAW agent checking for excess nodes, trace artifacts, stitch issues...
+                  OpenCLAW agent checking for excess nodes, trace artifacts,
+                  stitch issues...
                 </p>
               )}
               {pipelineState === "converting_dst" && (
@@ -350,7 +361,8 @@ function CanvasContent() {
               )}
               {pipelineState === "reviewing_dst" && (
                 <p className="text-xs text-foreground/20">
-                  OpenCLAW agent checking stitch density, jump stitches, color order...
+                  OpenCLAW agent checking stitch density, jump stitches, color
+                  order...
                 </p>
               )}
             </div>
@@ -369,77 +381,12 @@ function CanvasContent() {
             </div>
           )}
 
-          {/* Pipeline complete */}
-          {pipelineState === "done" && tabUrl && (
-            <div className="flex flex-col items-center gap-5 animate-in fade-in">
-              {/* Image preview */}
-              <div className="overflow-hidden rounded-2xl border border-white/10 bg-surface shadow-2xl shadow-black/40">
-                <img
-                  src={tabUrl}
-                  alt={`${activeTab} view`}
-                  className="max-h-[40vh] max-w-[60vw] object-contain"
-                />
-              </div>
+          {/* Pipeline complete — Garment Mockup + DST Preview */}
+          {pipelineState === "done" && designUrl && (
+            <div className="flex w-full max-w-2xl flex-col items-center gap-6 animate-in fade-in">
+              <GarmentMockup designImageUrl={designUrl} />
 
-              {/* View tabs */}
-              <div className="flex items-center gap-1 rounded-lg bg-white/4 p-1">
-                {(["original", "preprocessed", "svg"] as ViewTab[]).map(
-                  (tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setActiveTab(tab)}
-                      className={`rounded-md px-3 py-1.5 text-xs capitalize transition-all ${
-                        activeTab === tab
-                          ? "bg-white/8 text-accent"
-                          : "text-foreground/40 hover:text-foreground/60"
-                      }`}
-                    >
-                      {tab === "svg" ? "SVG" : tab}
-                    </button>
-                  )
-                )}
-              </div>
-
-              {/* Preprocessing badges */}
-              {stepsApplied.length > 0 && activeTab === "preprocessed" && (
-                <div className="flex flex-wrap justify-center gap-2">
-                  {stepsApplied.map((step) => (
-                    <span
-                      key={step}
-                      className="rounded-full border border-accent/20 bg-accent/8 px-3 py-1 text-xs text-accent/80"
-                    >
-                      {STEP_LABELS[step] ?? step}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* DST stats */}
-              <div className="flex flex-col items-center gap-3">
-                <div className="flex items-center gap-4 text-xs text-foreground/40">
-                  <span>{stitchCount.toLocaleString()} stitches</span>
-                  <span className="text-foreground/10">|</span>
-                  <span>
-                    {dimensionsMm[0]} × {dimensionsMm[1]} mm
-                  </span>
-                  <span className="text-foreground/10">|</span>
-                  <span>{threadColors.length} thread colors</span>
-                </div>
-
-                {/* Thread color swatches */}
-                <div className="flex items-center gap-1.5">
-                  {threadColors.map((tc, i) => (
-                    <div
-                      key={i}
-                      title={tc.hex}
-                      className="h-4 w-4 rounded-full border border-white/10"
-                      style={{ backgroundColor: tc.hex }}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Agent review badges */}
+              {/* Review badges */}
               {(svgReviewed || dstReviewed) && (
                 <div className="flex items-center gap-2">
                   {svgReviewed && (
@@ -456,97 +403,104 @@ function CanvasContent() {
               )}
 
               {agentFeedback && (
-                <p className="max-w-md text-center text-xs text-foreground/30 italic">
+                <p className="max-w-md text-center text-xs italic text-foreground/30">
                   &ldquo;{agentFeedback}&rdquo;
                 </p>
               )}
 
-              {/* Download button */}
-              {dstUrl && (
-                <a
-                  href={dstUrl}
-                  download
-                  className="rounded-xl bg-accent px-8 py-3 text-sm font-medium text-background transition-all hover:brightness-110"
-                >
-                  Download .DST File
-                </a>
-              )}
-
-              {/* Manufacturing quote */}
-              {dstUrl && !showQuoteForm && (
+              {/* Action buttons */}
+              <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setShowQuoteForm(true)}
-                  className="text-xs text-foreground/30 underline decoration-foreground/10 transition-colors hover:text-accent/60"
+                  onClick={handleToggleDstPreview}
+                  className="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-sm text-foreground/70 transition-all hover:bg-white/10 hover:text-foreground"
                 >
-                  Want these manufactured?
+                  {showDstPreview
+                    ? "Hide Stitch Map"
+                    : "Preview DST Stitch Map"}
                 </button>
-              )}
-
-              {showQuoteForm && (
-                <div className="mt-2 flex w-full max-w-sm flex-col gap-3 rounded-xl border border-white/8 bg-white/3 p-5">
-                  <p className="text-sm font-medium text-foreground/60">
-                    Get a manufacturing quote
-                  </p>
-
-                  <div className="flex gap-3">
-                    <select
-                      value={quoteGarment}
-                      onChange={(e) => setQuoteGarment(e.target.value)}
-                      className="flex-1 rounded-lg border border-white/10 bg-white/6 px-3 py-2 text-sm text-foreground outline-none"
-                    >
-                      {["t-shirt", "hoodie", "hat", "polo", "jacket", "tote"].map(
-                        (g) => (
-                          <option key={g} value={g}>
-                            {g.charAt(0).toUpperCase() + g.slice(1)}
-                          </option>
-                        )
-                      )}
-                    </select>
-
-                    <input
-                      type="number"
-                      min={1}
-                      value={quoteQuantity}
-                      onChange={(e) =>
-                        setQuoteQuantity(Math.max(1, parseInt(e.target.value) || 1))
-                      }
-                      className="w-20 rounded-lg border border-white/10 bg-white/6 px-3 py-2 text-sm text-foreground outline-none"
-                      placeholder="Qty"
-                    />
-                  </div>
-
-                  <button
-                    onClick={handleGetQuote}
-                    disabled={quoteLoading}
-                    className="rounded-lg bg-accent/90 px-4 py-2.5 text-sm font-medium text-background transition-all hover:bg-accent disabled:opacity-50"
+                {dstUrl && (
+                  <a
+                    href={dstUrl}
+                    download
+                    className="rounded-xl bg-accent px-6 py-2.5 text-sm font-medium text-background transition-all hover:brightness-110"
                   >
-                    {quoteLoading ? "Getting quote..." : "Get Quote"}
-                  </button>
+                    Download .DST
+                  </a>
+                )}
+              </div>
 
-                  {quoteResult && (
-                    <div className="flex flex-col gap-2 rounded-lg border border-accent/15 bg-accent/5 p-4 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-foreground/50">Unit price</span>
-                        <span className="text-foreground/80">
-                          ${quoteResult.unit_price.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-foreground/50">Total</span>
-                        <span className="font-medium text-accent">
-                          ${quoteResult.total_price.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-foreground/50">Turnaround</span>
-                        <span className="text-foreground/80">
-                          {quoteResult.turnaround_days} days
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-foreground/30">
-                        {quoteResult.notes}
+              {/* DST Stitch Preview (collapsible) */}
+              {showDstPreview && (
+                <div className="w-full rounded-xl border border-white/8 bg-white/3 p-5">
+                  {dstPreviewLoading ? (
+                    <div className="flex flex-col items-center gap-3 py-8">
+                      <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/10 border-t-accent" />
+                      <p className="text-xs text-foreground/30">
+                        Rendering stitch preview...
                       </p>
                     </div>
+                  ) : dstPreviewUrl ? (
+                    <div className="flex flex-col gap-5 sm:flex-row">
+                      <div className="flex flex-1 flex-col items-center gap-3">
+                        <div className="overflow-hidden rounded-lg border border-white/8 bg-surface">
+                          <img
+                            src={dstPreviewUrl}
+                            alt="DST stitch preview"
+                            className="max-h-[300px] w-full object-contain"
+                          />
+                        </div>
+                        <a
+                          href={dstPreviewUrl}
+                          download="stitch-preview.png"
+                          className="text-xs text-foreground/30 underline decoration-foreground/10 transition-colors hover:text-accent/60"
+                        >
+                          Download preview image
+                        </a>
+                      </div>
+
+                      <div className="flex flex-col gap-4 sm:w-48">
+                        <div>
+                          <p className="mb-2 text-xs font-medium text-foreground/50">
+                            Thread Colors
+                          </p>
+                          <div className="flex flex-col gap-1.5">
+                            {threadColors.map((tc, i) => (
+                              <div
+                                key={i}
+                                className="flex items-center gap-2"
+                              >
+                                <div
+                                  className="h-4 w-4 shrink-0 rounded-full border border-white/10"
+                                  style={{ backgroundColor: tc.hex }}
+                                />
+                                <span className="font-mono text-xs text-foreground/40">
+                                  {tc.hex}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-1 text-xs text-foreground/40">
+                          <span>
+                            {stitchCount.toLocaleString()} stitches
+                          </span>
+                          {dimensionsMm.length >= 2 && (
+                            <span>
+                              {dimensionsMm[0]} × {dimensionsMm[1]} mm
+                            </span>
+                          )}
+                          <span>
+                            {threadColors.length} thread color
+                            {threadColors.length !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="py-4 text-center text-xs text-foreground/30">
+                      Could not load stitch preview.
+                    </p>
                   )}
                 </div>
               )}
@@ -561,30 +515,16 @@ function CanvasContent() {
           )}
         </div>
       </div>
-
-      {/* Bottom input bar */}
-      <div className="relative z-10 border-t border-white/6 bg-background px-8 pb-8 pt-5">
-        <p className="mb-3 text-sm font-medium tracking-widest text-accent">
-          Let&apos;s Build ...
-        </p>
-        <form onSubmit={handleSubmit}>
-          <input
-            type="text"
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Describe what you want to embroider..."
-            className="w-full rounded-xl border border-white/10 bg-white/[0.07] px-5 py-4 text-base text-foreground outline-none transition-all placeholder:text-foreground/25 focus:border-accent/30 focus:bg-white/10"
-          />
-        </form>
-      </div>
     </div>
   );
 }
 
 export default function CanvasPage() {
   return (
-    <Suspense>
-      <CanvasContent />
-    </Suspense>
+    <AuthGuard>
+      <Suspense>
+        <CanvasContent />
+      </Suspense>
+    </AuthGuard>
   );
 }

@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import ContourGraphic from "@/components/ContourGraphic";
+import { useAuth } from "@/context/AuthContext";
 
 export default function Home() {
+  const { user, loading } = useAuth();
+
   return (
     <div className="relative flex h-screen items-center overflow-hidden bg-background">
       {/* Contour graphic — offset left, large */}
@@ -14,6 +17,7 @@ export default function Home() {
             width={900}
             height={900}
             lineCount={34}
+            animate
           />
         </div>
       </div>
@@ -35,12 +39,33 @@ export default function Home() {
           <span>Stitch</span>
         </div>
 
-        <Link
-          href="/build"
-          className="mt-12 text-base font-medium tracking-wide text-accent transition-colors hover:text-accent/80"
-        >
-          Get Started →
-        </Link>
+        {!loading && (
+          <div className="mt-12 flex flex-col items-end gap-3">
+            {user ? (
+              <Link
+                href="/build"
+                className="text-base font-medium tracking-wide text-accent transition-colors hover:text-accent/80"
+              >
+                Get Started →
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="rounded-xl bg-accent px-6 py-3 text-sm font-medium text-background transition-all hover:brightness-110"
+                >
+                  Log In to Get Started
+                </Link>
+                <Link
+                  href="/signup"
+                  className="text-sm text-foreground/30 transition-colors hover:text-foreground/50"
+                >
+                  Don&apos;t have an account? Sign Up
+                </Link>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

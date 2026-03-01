@@ -1,11 +1,11 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from google import genai
-from google.genai import types
-from PIL import Image, ImageEnhance, ImageFilter
+from google.genai.types import GenerateContentConfig, Modality
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 import os
 import uuid
 import io
@@ -15,6 +15,12 @@ import vtracer
 import pyembroidery
 
 from discord_integration import send_files_to_agent, poll_for_agent_response, download_file
+from auth import (
+    init_db, register_user, login_user, get_current_user,
+    save_suture, get_user_sutures,
+    RegisterRequest, LoginRequest, AuthResponse, UserOut,
+    SaveSutureRequest, SutureRecord,
+)
 
 try:
     from rembg import remove as remove_bg
@@ -33,7 +39,12 @@ SVG_DIR.mkdir(exist_ok=True)
 DST_DIR = pathlib.Path("generated_dst")
 DST_DIR.mkdir(exist_ok=True)
 
+PREVIEW_DIR = pathlib.Path("generated_previews")
+PREVIEW_DIR.mkdir(exist_ok=True)
+
 app = FastAPI(title="Suture API", version="0.1.0")
+
+init_db()
 
 app.add_middleware(
     CORSMiddleware,
@@ -46,6 +57,7 @@ app.add_middleware(
 app.mount("/images", StaticFiles(directory=str(IMAGES_DIR)), name="images")
 app.mount("/svgs", StaticFiles(directory=str(SVG_DIR)), name="svgs")
 app.mount("/dst", StaticFiles(directory=str(DST_DIR)), name="dst")
+app.mount("/previews", StaticFiles(directory=str(PREVIEW_DIR)), name="previews")
 
 _gemini_client = None
 
@@ -107,19 +119,26 @@ async def generate_image(req: GenerateRequest):
 
     try:
         client = get_gemini_client()
-        response = client.models.generate_images(
-            model="imagen-3.0-generate-002",
-            prompt=embroidery_prompt,
-            config=types.GenerateImagesConfig(number_of_images=1),
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-preview-image-generation",
+            contents=embroidery_prompt,
+            config=GenerateContentConfig(
+                response_modalities=[Modality.IMAGE, Modality.TEXT],
+            ),
         )
 
-        if not response.generated_images:
+        image_bytes = None
+        if response.candidates and response.candidates[0].content:
+            for part in response.candidates[0].content.parts:
+                if part.inline_data and part.inline_data.mime_type.startswith("image/"):
+                    image_bytes = part.inline_data.data
+                    break
+
+        if not image_bytes:
             raise HTTPException(
                 status_code=502,
                 detail="Gemini returned no images. Try a different prompt.",
             )
-
-        image_bytes = response.generated_images[0].image.image_bytes
         image_id = str(uuid.uuid4())
         ext = "png"
         filename = f"{image_id}.{ext}"
@@ -603,6 +622,118 @@ async def convert_to_dst(req: ConvertDstRequest):
 
 
 # ---------------------------------------------------------------------------
+# DST Stitch Preview — renders pattern to a transparent PNG
+# ---------------------------------------------------------------------------
+
+
+class DstPreviewRequest(BaseModel):
+    image_id: str
+
+
+class DstPreviewResponse(BaseModel):
+    preview_id: str
+    preview_url: str
+    thread_colors: list[ThreadInfo]
+    stitch_count: int
+    dimensions_mm: list[float]
+
+
+def _render_pattern_preview(
+    pattern: pyembroidery.EmbPattern,
+    colors: list[tuple[int, int, int]],
+    size: int = 800,
+) -> Image.Image:
+    min_x = min_y = float("inf")
+    max_x = max_y = float("-inf")
+
+    for s in pattern.stitches:
+        if s[2] in (pyembroidery.STITCH, pyembroidery.JUMP):
+            min_x, min_y = min(min_x, s[0]), min(min_y, s[1])
+            max_x, max_y = max(max_x, s[0]), max(max_y, s[1])
+
+    if min_x == float("inf"):
+        return Image.new("RGBA", (size, size), (0, 0, 0, 0))
+
+    pad = 30
+    w = max_x - min_x or 1
+    h = max_y - min_y or 1
+    scale = (size - 2 * pad) / max(w, h)
+    img_w = int(w * scale) + 2 * pad
+    img_h = int(h * scale) + 2 * pad
+
+    img = Image.new("RGBA", (img_w, img_h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    ci = 0
+    color = colors[0] if colors else (0, 0, 0)
+    px = py = None
+
+    for s in pattern.stitches:
+        x, y, cmd = s[0], s[1], s[2]
+        sx = int((x - min_x) * scale) + pad
+        sy = int((y - min_y) * scale) + pad
+
+        if cmd == pyembroidery.STITCH:
+            if px is not None:
+                draw.line([(px, py), (sx, sy)], fill=(*color, 255), width=2)
+            px, py = sx, sy
+        elif cmd == pyembroidery.JUMP:
+            px, py = sx, sy
+        elif cmd == pyembroidery.COLOR_CHANGE:
+            ci += 1
+            if ci < len(colors):
+                color = colors[ci]
+            px = py = None
+        elif cmd == pyembroidery.TRIM:
+            px = py = None
+        elif cmd == pyembroidery.END:
+            break
+
+    return img
+
+
+@app.post("/dst-preview", response_model=DstPreviewResponse)
+async def dst_preview(req: DstPreviewRequest):
+    source_path = IMAGES_DIR / f"{req.image_id}.png"
+    if not source_path.exists():
+        raise HTTPException(status_code=404, detail="Source image not found.")
+
+    try:
+        img = Image.open(source_path)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not open the image file.")
+
+    try:
+        pattern, colors = _image_to_pattern(img)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Pattern generation failed: {e}")
+
+    try:
+        preview_img = _render_pattern_preview(pattern, colors)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Preview render failed: {e}")
+
+    preview_id = str(uuid.uuid4())
+    preview_filename = f"{preview_id}.png"
+    preview_path = PREVIEW_DIR / preview_filename
+    preview_img.save(preview_path, "PNG")
+
+    w, h = img.size
+    scale = DESIGN_SIZE_MM / max(w, h)
+
+    return DstPreviewResponse(
+        preview_id=preview_id,
+        preview_url=f"/previews/{preview_filename}",
+        thread_colors=[
+            ThreadInfo(r=r, g=g, b=b, hex=f"#{r:02x}{g:02x}{b:02x}")
+            for r, g, b in colors
+        ],
+        stitch_count=len(pattern.stitches),
+        dimensions_mm=[round(w * scale, 1), round(h * scale, 1)],
+    )
+
+
+# ---------------------------------------------------------------------------
 # Step 5 — OpenCLAW Check #1: SVG Review via Discord Agent
 # ---------------------------------------------------------------------------
 
@@ -818,3 +949,38 @@ async def manufacturing_quote(req: QuoteRequest):
         notes=f"Estimated quote for {req.quantity}× {req.garment} with {req.stitch_count:,} stitches. "
         f"Final pricing confirmed after production review.",
     )
+
+
+# ---------------------------------------------------------------------------
+# Auth Endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post("/auth/register", response_model=AuthResponse)
+async def api_register(req: RegisterRequest):
+    return register_user(req)
+
+
+@app.post("/auth/login", response_model=AuthResponse)
+async def api_login(req: LoginRequest):
+    return login_user(req)
+
+
+@app.get("/auth/me", response_model=UserOut)
+async def api_me(user: dict = Depends(get_current_user)):
+    return UserOut(**user)
+
+
+# ---------------------------------------------------------------------------
+# Suture History Endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post("/sutures", response_model=SutureRecord)
+async def api_save_suture(req: SaveSutureRequest, user: dict = Depends(get_current_user)):
+    return save_suture(user["id"], req)
+
+
+@app.get("/sutures", response_model=list[SutureRecord])
+async def api_get_sutures(user: dict = Depends(get_current_user)):
+    return get_user_sutures(user["id"])

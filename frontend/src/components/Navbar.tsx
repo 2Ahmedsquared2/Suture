@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 
 export default function Navbar() {
   const pathname = usePathname();
   const isHome = pathname === "/";
+  const { user, loading, logout } = useAuth();
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-5">
@@ -36,18 +38,48 @@ export default function Navbar() {
             )}
           </Link>
         )}
-        <Link
-          href="#"
-          className="text-foreground/40 hover:text-foreground/70 transition-colors"
-        >
-          Log In
-        </Link>
-        <Link
-          href="#"
-          className="text-foreground/80 hover:text-foreground transition-colors"
-        >
-          Sign Up
-        </Link>
+
+        {!loading && user && (
+          <Link
+            href="/sutures"
+            className={`transition-colors ${
+              pathname === "/sutures"
+                ? "text-accent"
+                : "text-foreground/40 hover:text-foreground/70"
+            }`}
+          >
+            My Sutures
+          </Link>
+        )}
+
+        {loading ? (
+          <span className="h-4 w-16 animate-pulse rounded bg-white/5" />
+        ) : user ? (
+          <div className="flex items-center gap-4">
+            <span className="text-foreground/50">{user.name}</span>
+            <button
+              onClick={logout}
+              className="text-foreground/30 transition-colors hover:text-foreground/60"
+            >
+              Log Out
+            </button>
+          </div>
+        ) : (
+          <>
+            <Link
+              href="/login"
+              className="text-foreground/40 hover:text-foreground/70 transition-colors"
+            >
+              Log In
+            </Link>
+            <Link
+              href="/signup"
+              className="text-foreground/80 hover:text-foreground transition-colors"
+            >
+              Sign Up
+            </Link>
+          </>
+        )}
       </div>
     </nav>
   );

@@ -3,13 +3,14 @@
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import ContourGraphic from "@/components/ContourGraphic";
+import AuthGuard from "@/components/AuthGuard";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 type InputMode = "describe" | "upload";
 type FlowState = "idle" | "loading" | "preview";
 
-export default function BuildPage() {
+function BuildContent() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -106,7 +107,14 @@ export default function BuildPage() {
 
   const handleApprove = () => {
     if (imageId && previewUrl) {
-      router.push(`/canvas?imageId=${imageId}&imageUrl=${encodeURIComponent(previewUrl)}`);
+      const params = new URLSearchParams({
+        imageId,
+        imageUrl: previewUrl,
+      });
+      if (mode === "describe" && prompt.trim()) {
+        params.set("prompt", prompt.trim());
+      }
+      router.push(`/canvas?${params.toString()}`);
     }
   };
 
@@ -315,5 +323,13 @@ export default function BuildPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function BuildPage() {
+  return (
+    <AuthGuard>
+      <BuildContent />
+    </AuthGuard>
   );
 }

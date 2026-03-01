@@ -7,6 +7,7 @@ interface ContourGraphicProps {
   width?: number;
   height?: number;
   lineCount?: number;
+  animate?: boolean;
 }
 
 function smoothPath(points: [number, number][]): string {
@@ -86,11 +87,16 @@ export default function ContourGraphic({
   width = 800,
   height = 800,
   lineCount = 32,
+  animate = false,
 }: ContourGraphicProps) {
   const paths = useMemo(
     () => generateContourPaths(width, height, lineCount),
     [width, height, lineCount]
   );
+
+  const DASH_LENGTH = 4000;
+  const DRAW_DURATION = 1.6;
+  const STAGGER = 0.06;
 
   return (
     <svg
@@ -99,6 +105,14 @@ export default function ContourGraphic({
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
+      {animate && (
+        <style>{`
+          @keyframes stitch-draw {
+            from { stroke-dashoffset: ${DASH_LENGTH}; }
+            to   { stroke-dashoffset: 0; }
+          }
+        `}</style>
+      )}
       {paths.map((p, i) => (
         <path
           key={i}
@@ -106,6 +120,13 @@ export default function ContourGraphic({
           stroke="white"
           strokeWidth={p.width}
           opacity={p.opacity}
+          {...(animate && {
+            strokeDasharray: DASH_LENGTH,
+            strokeDashoffset: DASH_LENGTH,
+            style: {
+              animation: `stitch-draw ${DRAW_DURATION}s ease-out ${(i * STAGGER).toFixed(2)}s forwards`,
+            },
+          })}
         />
       ))}
     </svg>

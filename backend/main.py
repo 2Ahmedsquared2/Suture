@@ -1,8 +1,10 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from dotenv import load_dotenv
 from google import genai
 from google.genai.types import GenerateContentConfig, Modality
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
@@ -27,8 +29,6 @@ try:
     REMBG_AVAILABLE = True
 except (ImportError, SystemExit, Exception):
     REMBG_AVAILABLE = False
-
-load_dotenv()
 
 IMAGES_DIR = pathlib.Path("generated_images")
 IMAGES_DIR.mkdir(exist_ok=True)
@@ -390,6 +390,82 @@ async def preprocess_image(req: PreprocessRequest):
         preprocessed_image_id=preprocessed_id,
         preprocessed_image_url=f"/images/{filename}",
         steps_applied=steps,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Step 3.5 — OpenCLAW Check #0: Image Review via Discord Agent
+# ---------------------------------------------------------------------------
+
+
+class ReviewImageRequest(BaseModel):
+    image_id: str
+
+
+class ReviewImageResponse(BaseModel):
+    image_id: str
+    image_url: str
+    reviewed: bool
+    agent_feedback: str | None = None
+
+
+@app.post("/review-image", response_model=ReviewImageResponse)
+async def review_image(req: ReviewImageRequest):
+    image_path = IMAGES_DIR / f"{req.image_id}.png"
+
+    if not image_path.exists():
+        raise HTTPException(status_code=404, detail="Image not found.")
+
+    msg_id = await send_files_to_agent(
+        message="Image Review — This image was just approved by the user. "
+        "Please review it and get rid of any unneeded background. "
+        "Clean it up so it's ready for SVG tracing and embroidery conversion. "
+        "Reply with an improved PNG attached if changes are needed, or confirm it's good.",
+        file_paths=[str(image_path)],
+    )
+
+    if not msg_id:
+        return ReviewImageResponse(
+            image_id=req.image_id,
+            image_url=f"/images/{req.image_id}.png",
+            reviewed=False,
+            agent_feedback="Could not reach the review agent. Continuing with original image.",
+        )
+
+    result = await poll_for_agent_response(msg_id)
+
+    if result is None:
+        return ReviewImageResponse(
+            image_id=req.image_id,
+            image_url=f"/images/{req.image_id}.png",
+            reviewed=False,
+            agent_feedback="Agent did not respond in time. Continuing with original image.",
+        )
+
+    image_attachments = [
+        u for u in result["attachment_urls"]
+        if any(u.lower().endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".webp"))
+    ]
+
+    if image_attachments:
+        reviewed_id = str(uuid.uuid4())
+        reviewed_filename = f"{reviewed_id}.png"
+        reviewed_path = IMAGES_DIR / reviewed_filename
+        downloaded = await download_file(image_attachments[0], str(reviewed_path))
+
+        if downloaded and reviewed_path.exists() and reviewed_path.stat().st_size > 0:
+            return ReviewImageResponse(
+                image_id=reviewed_id,
+                image_url=f"/images/{reviewed_filename}",
+                reviewed=True,
+                agent_feedback=result["content"] or "Agent cleaned up the image.",
+            )
+
+    return ReviewImageResponse(
+        image_id=req.image_id,
+        image_url=f"/images/{req.image_id}.png",
+        reviewed=True,
+        agent_feedback=result["content"] or "Agent approved the image as-is.",
     )
 
 
@@ -889,65 +965,70 @@ async def review_dst(req: ReviewDstRequest):
 
 
 # ---------------------------------------------------------------------------
-# Manufacturing Quote (placeholder — not connected to real pricing yet)
+# Manufacturing Quote — OpenCLAW Price Optimizer via Discord Agent
 # ---------------------------------------------------------------------------
 
 
-class QuoteRequest(BaseModel):
-    garment: str
+class OpenClawQuoteRequest(BaseModel):
+    details: str
     quantity: int
-    stitch_count: int
-    thread_colors: int
+    brand_preference: str = ""
+    colors: str = ""
+    stitch_count: int = 0
+    thread_colors: int = 0
+    dimensions_mm: list[float] = []
 
 
-class QuoteResponse(BaseModel):
-    garment: str
-    quantity: int
-    unit_price: float
-    total_price: float
-    turnaround_days: int
-    notes: str
+class OpenClawQuoteResponse(BaseModel):
+    quote_text: str
+    agent_responded: bool
 
 
-@app.post("/manufacturing-quote", response_model=QuoteResponse)
-async def manufacturing_quote(req: QuoteRequest):
-    if req.quantity < 1:
-        raise HTTPException(status_code=400, detail="Quantity must be at least 1.")
+@app.post("/openclaw-quote", response_model=OpenClawQuoteResponse)
+async def openclaw_quote(req: OpenClawQuoteRequest):
+    if req.quantity < 5:
+        raise HTTPException(status_code=400, detail="Minimum order quantity is 5.")
 
-    base_prices = {
-        "t-shirt": 8.00,
-        "hoodie": 18.00,
-        "hat": 6.00,
-        "polo": 12.00,
-        "jacket": 22.00,
-        "tote": 5.00,
-    }
-    base = base_prices.get(req.garment.lower(), 10.00)
+    if not req.details.strip():
+        raise HTTPException(status_code=400, detail="Please provide some details about your order.")
 
-    stitch_surcharge = (req.stitch_count / 1000) * 0.15
-    color_surcharge = max(0, req.thread_colors - 1) * 0.50
+    dims = ""
+    if req.dimensions_mm and len(req.dimensions_mm) >= 2:
+        dims = f"{req.dimensions_mm[0]}×{req.dimensions_mm[1]} mm"
 
-    unit = round(base + stitch_surcharge + color_surcharge, 2)
+    message = (
+        "Manufacturing Price Quote Request — A customer wants this embroidery design produced. "
+        "Please provide a price quote based on the following details:\n\n"
+        f"**Order Details:** {req.details.strip()}\n"
+        f"**Quantity:** {req.quantity} units\n"
+        f"**Brand/Garment Preference:** {req.brand_preference.strip() or 'No preference'}\n"
+        f"**Color Preferences:** {req.colors.strip() or 'No preference'}\n"
+        f"**Stitch Count:** {req.stitch_count:,}\n"
+        f"**Thread Colors:** {req.thread_colors}\n"
+        f"**Design Dimensions:** {dims or 'N/A'}\n\n"
+        "Please reply with a price estimate including per-unit cost, total cost, "
+        "and estimated turnaround time."
+    )
 
-    if req.quantity >= 100:
-        unit = round(unit * 0.80, 2)
-    elif req.quantity >= 50:
-        unit = round(unit * 0.85, 2)
-    elif req.quantity >= 25:
-        unit = round(unit * 0.90, 2)
+    msg_id = await send_files_to_agent(message=message, file_paths=[])
 
-    total = round(unit * req.quantity, 2)
+    if not msg_id:
+        raise HTTPException(
+            status_code=502,
+            detail="Could not reach the pricing agent. Please try again later.",
+        )
 
-    turnaround = 14 if req.quantity <= 25 else 21 if req.quantity <= 100 else 30
+    result = await poll_for_agent_response(msg_id, timeout=120)
 
-    return QuoteResponse(
-        garment=req.garment,
-        quantity=req.quantity,
-        unit_price=unit,
-        total_price=total,
-        turnaround_days=turnaround,
-        notes=f"Estimated quote for {req.quantity}× {req.garment} with {req.stitch_count:,} stitches. "
-        f"Final pricing confirmed after production review.",
+    if result is None:
+        raise HTTPException(
+            status_code=504,
+            detail="Pricing agent did not respond in time. Please try again.",
+        )
+
+    return OpenClawQuoteResponse(
+        quote_text=result["content"] or "Agent responded but provided no text.",
+        agent_responded=True,
     )
 
 

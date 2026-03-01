@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import ContourGraphic from "@/components/ContourGraphic";
+import QuoteModal from "@/components/QuoteModal";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -49,6 +50,7 @@ export default function SuturesPage() {
   const [sutures, setSutures] = useState<Suture[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [quoteSuture, setQuoteSuture] = useState<Suture | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -215,19 +217,27 @@ export default function SuturesPage() {
                     </div>
                   )}
 
-                  <div className="mt-auto flex items-center justify-between pt-2">
+                  <div className="mt-auto flex flex-col gap-2 pt-2">
                     <span className="text-xs text-foreground/20">
                       {formatDate(s.created_at)}
                     </span>
-                    {s.dst_url && (
-                      <a
-                        href={s.dst_url}
-                        download
-                        className="rounded-lg bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent transition-all hover:bg-accent/20"
+                    <div className="flex items-center gap-2">
+                      {s.dst_url && (
+                        <a
+                          href={s.dst_url}
+                          download
+                          className="rounded-lg bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent transition-all hover:bg-accent/20"
+                        >
+                          Download .DST
+                        </a>
+                      )}
+                      <button
+                        onClick={() => setQuoteSuture(s)}
+                        className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-foreground/60 transition-all hover:bg-white/10 hover:text-foreground/80"
                       >
-                        Download .DST
-                      </a>
-                    )}
+                        Add to Cart
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -235,6 +245,21 @@ export default function SuturesPage() {
           </div>
         )}
       </div>
+
+      <QuoteModal
+        open={!!quoteSuture}
+        onClose={() => setQuoteSuture(null)}
+        designImageUrl={
+          quoteSuture?.preprocessed_image_url ??
+          quoteSuture?.original_image_url ??
+          null
+        }
+        dstUrl={quoteSuture?.dst_url ?? null}
+        stitchCount={quoteSuture?.stitch_count ?? 0}
+        threadColors={quoteSuture?.thread_colors?.length ?? 0}
+        dimensionsMm={quoteSuture?.dimensions_mm ?? []}
+        skipAsk
+      />
     </div>
   );
 }

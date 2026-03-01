@@ -42,12 +42,12 @@ const GARMENT_FILTERS: Record<GarmentType, Record<GarmentColor, string>> = {
   hoodie: {
     white: "none",
     gray: "brightness(0.55)",
-    black: "brightness(0.12)",
+    black: "brightness(0.18)",
   },
   crewneck: {
     white: "saturate(0) brightness(1.45)",
     gray: "saturate(0) brightness(0.72)",
-    black: "saturate(0) brightness(0.12)",
+    black: "saturate(0) brightness(0.18)",
   },
 };
 
@@ -221,7 +221,10 @@ export default function GarmentMockup({ designImageUrl }: GarmentMockupProps) {
           alt={`${garmentColor} ${garmentType}`}
           className="pointer-events-none mx-auto block h-auto w-full select-none object-contain"
           style={{
-            filter: garmentFilter,
+            filter:
+              garmentColor === "black"
+                ? `${garmentFilter} drop-shadow(0 0 18px rgba(255,255,255,0.12))`
+                : garmentFilter,
             maxHeight: "56vh",
           }}
           draggable={false}

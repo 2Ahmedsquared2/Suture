@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import ContourGraphic from "@/components/ContourGraphic";
 import GarmentMockup from "@/components/GarmentMockup";
 import { useAuth } from "@/context/AuthContext";
+import QuoteModal from "@/components/QuoteModal";
 import AuthGuard from "@/components/AuthGuard";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -12,6 +13,7 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 type PipelineState =
   | "idle"
   | "preprocessing"
+  | "reviewing_image"
   | "converting_svg"
   | "reviewing_svg"
   | "converting_dst"
@@ -48,6 +50,7 @@ function CanvasContent() {
   const [errorStage, setErrorStage] = useState<string | null>(null);
   const [svgId, setSvgId] = useState<string | null>(null);
   const [agentFeedback, setAgentFeedback] = useState<string | null>(null);
+  const [imageReviewed, setImageReviewed] = useState(false);
   const [svgReviewed, setSvgReviewed] = useState(false);
   const [dstReviewed, setDstReviewed] = useState(false);
 
@@ -55,6 +58,9 @@ function CanvasContent() {
   const [showDstPreview, setShowDstPreview] = useState(false);
   const [dstPreviewUrl, setDstPreviewUrl] = useState<string | null>(null);
   const [dstPreviewLoading, setDstPreviewLoading] = useState(false);
+
+  // Manufacturing quote modal
+  const [showQuoteModal, setShowQuoteModal] = useState(false);
 
   const runDstReview = useCallback(async (dstIdVal: string, svgIdVal: string) => {
     setPipelineState("reviewing_dst");
@@ -182,6 +188,42 @@ function CanvasContent() {
     [runSvgReview]
   );
 
+  const runImageReview = useCallback(
+    async (reviewImageId: string) => {
+      setPipelineState("reviewing_image");
+      setError(null);
+
+      try {
+        const res = await fetch(`${API}/review-image`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image_id: reviewImageId }),
+          signal: AbortSignal.timeout(330000),
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          throw new Error(data?.detail ?? `Image review failed (${res.status})`);
+        }
+
+        const data = await res.json();
+        const finalImageId = data.image_id;
+        setPreprocessedId(finalImageId);
+        if (data.image_url) setPreprocessedUrl(`${API}${data.image_url}`);
+        setImageReviewed(data.reviewed);
+        if (data.agent_feedback) setAgentFeedback(data.agent_feedback);
+
+        await runSvgConversion(finalImageId);
+      } catch (err) {
+        if (["converting_svg", "reviewing_svg", "converting_dst", "reviewing_dst"].includes(pipelineState)) return;
+        setError(err instanceof Error ? err.message : "Image review failed.");
+        setErrorStage("review_image");
+        setPipelineState("error");
+      }
+    },
+    [runSvgConversion]
+  );
+
   const runPreprocessing = useCallback(async () => {
     if (!imageId) return;
     setPipelineState("preprocessing");
@@ -205,9 +247,10 @@ function CanvasContent() {
       setPreprocessedId(data.preprocessed_image_id);
       setPreprocessedUrl(`${API}${data.preprocessed_image_url}`);
 
-      await runSvgConversion(data.preprocessed_image_id);
+      await runImageReview(data.preprocessed_image_id);
     } catch (err) {
       if (
+        pipelineState === "reviewing_image" ||
         pipelineState === "converting_svg" ||
         pipelineState === "converting_dst"
       )
@@ -216,7 +259,7 @@ function CanvasContent() {
       setErrorStage("preprocess");
       setPipelineState("error");
     }
-  }, [imageId, runSvgConversion]);
+  }, [imageId, runImageReview]);
 
   useEffect(() => {
     if (imageId && pipelineState === "idle" && !pipelineStartedRef.current) {
@@ -245,6 +288,7 @@ function CanvasContent() {
         stitch_count: stitchCount,
         dimensions_mm: dimensionsMm.length ? dimensionsMm : null,
         thread_colors: threadColors,
+        image_reviewed: imageReviewed,
         svg_reviewed: svgReviewed,
         dst_reviewed: dstReviewed,
         agent_feedback: agentFeedback,
@@ -253,7 +297,7 @@ function CanvasContent() {
   }, [
     pipelineState, token, promptParam, imageUrl, preprocessedUrl,
     svgUrl, dstUrl, dstId, stitchCount, dimensionsMm,
-    threadColors, svgReviewed, dstReviewed, agentFeedback,
+    threadColors, imageReviewed, svgReviewed, dstReviewed, agentFeedback,
   ]);
 
   const handleRetry = () => {
@@ -265,6 +309,8 @@ function CanvasContent() {
       runSvgReview(svgId, preprocessedId);
     } else if (errorStage === "svg" && preprocessedId) {
       runSvgConversion(preprocessedId);
+    } else if (errorStage === "review_image" && preprocessedId) {
+      runImageReview(preprocessedId);
     } else {
       setPipelineState("idle");
     }
@@ -304,6 +350,7 @@ function CanvasContent() {
 
   const isLoading =
     pipelineState === "preprocessing" ||
+    pipelineState === "reviewing_image" ||
     pipelineState === "converting_svg" ||
     pipelineState === "reviewing_svg" ||
     pipelineState === "converting_dst" ||
@@ -312,15 +359,17 @@ function CanvasContent() {
   const loadingText =
     pipelineState === "preprocessing"
       ? "Preprocessing image for embroidery..."
-      : pipelineState === "converting_svg"
-        ? "Converting to SVG..."
-        : pipelineState === "reviewing_svg"
-          ? "AI agent reviewing SVG quality..."
-          : pipelineState === "converting_dst"
-            ? "Generating stitch file..."
-            : pipelineState === "reviewing_dst"
-              ? "AI agent optimizing stitch file..."
-              : "";
+      : pipelineState === "reviewing_image"
+        ? "AI agent reviewing image..."
+        : pipelineState === "converting_svg"
+          ? "Converting to SVG..."
+          : pipelineState === "reviewing_svg"
+            ? "AI agent reviewing SVG quality..."
+            : pipelineState === "converting_dst"
+              ? "Generating stitch file..."
+              : pipelineState === "reviewing_dst"
+                ? "AI agent optimizing stitch file..."
+                : "";
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-background">
@@ -344,6 +393,12 @@ function CanvasContent() {
                   <span>Boosting contrast & sharpness</span>
                   <span>Simplifying colors</span>
                 </div>
+              )}
+              {pipelineState === "reviewing_image" && (
+                <p className="text-xs text-foreground/20">
+                  OpenCLAW agent cleaning up background and preparing image for
+                  tracing...
+                </p>
               )}
               {pipelineState === "converting_svg" && (
                 <p className="text-xs text-foreground/20">
@@ -389,8 +444,13 @@ function CanvasContent() {
               <GarmentMockup designImageUrl={designUrl} />
 
               {/* Review badges */}
-              {(svgReviewed || dstReviewed) && (
+              {(imageReviewed || svgReviewed || dstReviewed) && (
                 <div className="flex items-center gap-2">
+                  {imageReviewed && (
+                    <span className="rounded-full border border-green-500/20 bg-green-500/8 px-3 py-1 text-xs text-green-400/80">
+                      Image reviewed by AI
+                    </span>
+                  )}
                   {svgReviewed && (
                     <span className="rounded-full border border-green-500/20 bg-green-500/8 px-3 py-1 text-xs text-green-400/80">
                       SVG reviewed by AI
@@ -421,15 +481,24 @@ function CanvasContent() {
                     : "Preview DST Stitch Map"}
                 </button>
                 {dstUrl && (
-                  <a
-                    href={dstUrl}
-                    download
+                  <button
+                    onClick={() => setShowQuoteModal(true)}
                     className="rounded-xl bg-accent px-6 py-2.5 text-sm font-medium text-background transition-all hover:brightness-110"
                   >
                     Download .DST
-                  </a>
+                  </button>
                 )}
               </div>
+
+              <QuoteModal
+                open={showQuoteModal}
+                onClose={() => setShowQuoteModal(false)}
+                designImageUrl={designUrl}
+                dstUrl={dstUrl}
+                stitchCount={stitchCount}
+                threadColors={threadColors.length}
+                dimensionsMm={dimensionsMm}
+              />
 
               {/* DST Stitch Preview (collapsible) */}
               {showDstPreview && (

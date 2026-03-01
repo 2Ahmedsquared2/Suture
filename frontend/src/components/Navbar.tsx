@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { useCart } from "@/context/CartContext";
 
 export default function Navbar() {
   const pathname = usePathname();
   const isHome = pathname === "/";
   const { user, loading, logout } = useAuth();
+  const { count } = useCart();
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-5">
@@ -51,6 +53,30 @@ export default function Navbar() {
             My Sutures
           </Link>
         )}
+
+        <Link
+          href="/cart"
+          className={`relative transition-colors ${
+            pathname === "/cart"
+              ? "text-accent"
+              : "text-foreground/40 hover:text-foreground/70"
+          }`}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="inline-block">
+            <path
+              d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          {count > 0 && (
+            <span className="absolute -top-1.5 -right-2.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold text-background">
+              {count}
+            </span>
+          )}
+        </Link>
 
         {loading ? (
           <span className="h-4 w-16 animate-pulse rounded bg-white/5" />

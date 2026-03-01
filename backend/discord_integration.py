@@ -13,8 +13,8 @@ POLL_INTERVAL_SECONDS = 5
 POLL_TIMEOUT_SECONDS = 300  # 5 minutes
 
 
-async def send_files_to_agent(message: str, file_paths: list[str]) -> str | None:
-    """Send a message + file attachments to Discord via webhook.
+async def send_files_to_agent(message: str, file_paths: list[str] | None = None) -> str | None:
+    """Send a message + optional file attachments to Discord via webhook.
 
     Uses ``?wait=true`` so Discord returns the created message object,
     giving us the message ID we need for polling.
@@ -25,6 +25,17 @@ async def send_files_to_agent(message: str, file_paths: list[str]) -> str | None
         return None
 
     payload = {"content": f"<@{AGENT_USER_ID}> {message}"}
+    url = f"{DISCORD_WEBHOOK_URL}?wait=true"
+
+    if not file_paths:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(url, json=payload)
+            if resp.status_code == 200:
+                return resp.json().get("id")
+            return None
+        except Exception:
+            return None
 
     open_handles: list = []
     files_list: list[tuple] = []
@@ -37,7 +48,7 @@ async def send_files_to_agent(message: str, file_paths: list[str]) -> str | None
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
-                f"{DISCORD_WEBHOOK_URL}?wait=true",
+                url,
                 data={"payload_json": json.dumps(payload)},
                 files=files_list,
             )

@@ -43,11 +43,14 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-Create a `.env` file in the backend directory:
+Create a `.env` file in the backend directory (use `.env.example` as template):
 ```
-GEMINI_API_KEY=your_api_key_here
-JWT_SECRET_KEY=your_secret_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
+JWT_SECRET_KEY=your_secure_random_secret_key_here
+FRONTEND_URL=http://localhost:3000
 ```
+
+**⚠️ Security Note:** Never commit your `.env` file or real API keys to version control. Use the provided `.env.example` as a template only.
 
 ### Frontend
 

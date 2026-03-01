@@ -14,12 +14,12 @@ import numpy as np
 import vtracer
 import pyembroidery
 
-from discord_integration import send_files_to_agent
+from discord_integration import send_files_to_agent, poll_for_agent_response, download_file
 
 try:
     from rembg import remove as remove_bg
     REMBG_AVAILABLE = True
-except ImportError:
+except (ImportError, SystemExit, Exception):
     REMBG_AVAILABLE = False
 
 load_dotenv()

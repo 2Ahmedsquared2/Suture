@@ -5,39 +5,31 @@ import ContourGraphic from "@/components/ContourGraphic";
 
 export default function Home() {
   return (
-    <div className="relative flex min-h-screen overflow-hidden bg-background">
-      {/* Nav */}
-      <nav className="absolute top-0 right-0 z-10 flex items-center gap-6 px-10 py-6 text-sm">
-        <Link href="#" className="text-muted hover:text-foreground transition-colors">
-          Log In
-        </Link>
-        <Link
-          href="#"
-          className="text-foreground/90 hover:text-foreground transition-colors"
-        >
-          Sign Up
-        </Link>
-      </nav>
-
-      {/* Contour graphic — left side */}
-      <div className="absolute inset-y-0 -left-16 flex w-[60vw] items-center justify-center">
-        <ContourGraphic
-          className="h-[90vh] w-full opacity-90"
-          width={900}
-          height={900}
-          lineCount={30}
-          variant="hero"
-        />
+    <div className="relative flex h-screen items-center overflow-hidden bg-background">
+      {/* Contour graphic — offset left, large */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="relative -translate-x-[20%]">
+          <ContourGraphic
+            className="h-[88vh] w-auto"
+            width={900}
+            height={900}
+            lineCount={34}
+          />
+        </div>
       </div>
 
-      {/* Right content */}
-      <div className="relative z-10 ml-auto flex w-[45%] flex-col items-end justify-center gap-2 pr-16">
-        <h1 className="text-6xl font-light tracking-tight leading-none">
-          <span className="font-serif text-7xl italic text-foreground/95">S</span>
-          <span className="text-foreground/90">UTURE</span>
+      {/* Right content panel */}
+      <div className="relative z-10 ml-auto flex w-[40%] flex-col items-end justify-center pr-12 lg:pr-20">
+        <h1 className="leading-none">
+          <span className="font-serif text-8xl italic text-foreground/95 lg:text-9xl">
+            S
+          </span>
+          <span className="text-5xl font-extralight tracking-tight text-foreground/85 lg:text-6xl">
+            UTURE
+          </span>
         </h1>
 
-        <div className="mt-4 flex flex-col items-end gap-0.5 text-lg tracking-wide text-foreground/50">
+        <div className="mt-6 flex flex-col items-end gap-1 text-base tracking-widest text-foreground/40">
           <span>Upload</span>
           <span>Convert</span>
           <span>Stitch</span>
@@ -45,9 +37,9 @@ export default function Home() {
 
         <Link
           href="/build"
-          className="mt-10 text-lg font-medium text-accent hover:text-accent/80 transition-colors"
+          className="mt-12 text-base font-medium tracking-wide text-accent transition-colors hover:text-accent/80"
         >
-          Get Started&thinsp;→
+          Get Started →
         </Link>
       </div>
     </div>

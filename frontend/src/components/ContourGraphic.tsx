@@ -7,7 +7,6 @@ interface ContourGraphicProps {
   width?: number;
   height?: number;
   lineCount?: number;
-  variant?: "hero" | "background";
 }
 
 function smoothPath(points: [number, number][]): string {
@@ -31,46 +30,52 @@ function smoothPath(points: [number, number][]): string {
 function generateContourPaths(
   width: number,
   height: number,
-  lineCount: number,
-  variant: "hero" | "background"
+  lineCount: number
 ) {
-  const cx = width * 0.48;
-  const cy = height * 0.46;
-  const maxR = Math.min(width, height) * (variant === "hero" ? 0.42 : 0.38);
-  const minR = maxR * 0.04;
-  const paths: { d: string; opacity: number }[] = [];
+  const cx = width * 0.5;
+  const cy = height * 0.47;
+  const maxR = Math.min(width, height) * 0.43;
+  const minR = maxR * 0.025;
+  const paths: { d: string; opacity: number; width: number }[] = [];
 
   for (let i = 0; i < lineCount; i++) {
-    const t = Math.pow((i + 1) / lineCount, 1.4);
+    const t = Math.pow((i + 1) / lineCount, 1.3);
     const baseR = minR + t * (maxR - minR);
-    const numPts = 100;
+    const numPts = 120;
     const points: [number, number][] = [];
 
     for (let j = 0; j < numPts; j++) {
       const theta = (j / numPts) * Math.PI * 2;
 
+      // Butterfly / wing shape:
+      // - cos(2θ) inverted → top/bottom lobes instead of side lobes
+      // - sin(θ) → top-heavy
+      // - cos(4θ) inverted → splits the top into two wings
       const shape =
-        1 +
-        0.35 * Math.sin(theta + 0.15) +
-        0.18 * Math.cos(2 * theta - 0.1) +
-        0.09 * Math.sin(3 * theta + 0.4) -
-        0.06 * Math.cos(4 * theta + 0.3);
+        1 -
+        0.45 * Math.cos(2 * theta) +
+        0.38 * Math.sin(theta) -
+        0.3 * Math.cos(4 * theta) +
+        0.06 * Math.sin(3 * theta + 0.3);
 
-      const waveAmp = 2 + t * 14;
+      // Organic waviness — proportional to contour size
+      const wAmp = Math.max(1, baseR * 0.06) + t * 18;
       const wave =
-        Math.sin(5 * theta + i * 0.65) * waveAmp * 0.5 +
-        Math.cos(8 * theta - i * 0.45) * waveAmp * 0.3 +
-        Math.sin(13 * theta + i * 1.2) * waveAmp * 0.15;
+        Math.sin(5 * theta + i * 0.55) * wAmp * 0.4 +
+        Math.cos(7 * theta - i * 0.38) * wAmp * 0.28 +
+        Math.sin(11 * theta + i * 1.1) * wAmp * 0.13 +
+        Math.cos(17 * theta - i * 0.7) * wAmp * 0.05;
 
-      const r = baseR * shape + wave;
+      const r = Math.max(0.5, baseR * shape + wave);
       const x = cx + Math.cos(theta) * r;
-      const y = cy + Math.sin(theta) * r * 0.82;
+      const y = cy - Math.sin(theta) * r * 1.05;
 
       points.push([x, y]);
     }
 
-    const opacity = 0.12 + t * 0.58;
-    paths.push({ d: smoothPath(points), opacity });
+    const opacity = 0.06 + t * 0.64;
+    const strokeW = 0.4 + t * 0.5;
+    paths.push({ d: smoothPath(points), opacity, width: strokeW });
   }
 
   return paths;
@@ -80,12 +85,11 @@ export default function ContourGraphic({
   className = "",
   width = 800,
   height = 800,
-  lineCount = 28,
-  variant = "hero",
+  lineCount = 32,
 }: ContourGraphicProps) {
   const paths = useMemo(
-    () => generateContourPaths(width, height, lineCount, variant),
-    [width, height, lineCount, variant]
+    () => generateContourPaths(width, height, lineCount),
+    [width, height, lineCount]
   );
 
   return (
@@ -100,7 +104,7 @@ export default function ContourGraphic({
           key={i}
           d={p.d}
           stroke="white"
-          strokeWidth={0.7}
+          strokeWidth={p.width}
           opacity={p.opacity}
         />
       ))}

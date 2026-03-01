@@ -46,9 +46,20 @@ app = FastAPI(title="Suture API", version="0.1.0")
 
 init_db()
 
+# Configure CORS to support multiple origins
+allowed_origins = [
+    "http://localhost:3000",
+    "https://suture-ebon.vercel.app",
+]
+
+# Add custom FRONTEND_URL if provided
+frontend_url = os.getenv("FRONTEND_URL")
+if frontend_url and frontend_url not in allowed_origins:
+    allowed_origins.append(frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("FRONTEND_URL", "http://localhost:3000")],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

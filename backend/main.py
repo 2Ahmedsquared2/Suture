@@ -14,7 +14,7 @@ import numpy as np
 import vtracer
 import pyembroidery
 
-from discord_integration import send_files_to_agent, poll_for_agent_response, download_file
+from discord_integration import send_files_to_agent
 
 try:
     from rembg import remove as remove_bg

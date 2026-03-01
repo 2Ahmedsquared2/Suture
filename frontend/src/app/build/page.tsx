@@ -68,7 +68,7 @@ function BuildContent() {
     }
   };
 
-  const handleUploadFile = async (file: File) => {
+  const handleUploadFile = useCallback(async (file: File) => {
     setError(null);
     setEnhancementNote(null);
     setFlowState("loading");
@@ -98,7 +98,7 @@ function BuildContent() {
       setError(err instanceof Error ? err.message : "Something went wrong.");
       setFlowState("idle");
     }
-  };
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,8 +137,7 @@ function BuildContent() {
         setError("Please drop an image file.");
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [handleUploadFile],
   );
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

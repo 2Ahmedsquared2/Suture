@@ -36,18 +36,18 @@ const GARMENT_IMAGES: Record<GarmentType, Record<GarmentColor, string>> = {
 const GARMENT_FILTERS: Record<GarmentType, Record<GarmentColor, string>> = {
   tshirt: {
     white: "none",
-    gray: "brightness(0.55)",
+    gray: "brightness(0.55) saturate(0.3)",
     black: "none",
   },
   hoodie: {
     white: "none",
-    gray: "brightness(0.55)",
-    black: "brightness(0.18)",
+    gray: "brightness(0.55) saturate(0.3)",
+    black: "brightness(0.12) saturate(0)",
   },
   crewneck: {
     white: "saturate(0) brightness(1.45)",
-    gray: "saturate(0) brightness(0.72)",
-    black: "saturate(0) brightness(0.18)",
+    gray: "saturate(0) brightness(0.65)",
+    black: "saturate(0) brightness(0.12)",
   },
 };
 

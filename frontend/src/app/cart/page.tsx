@@ -113,10 +113,10 @@ export default function CartPage() {
             )}
             {count > 0 && (
               <button
-                onClick={() => alert("Payment processing coming soon!")}
+                onClick={() => alert("Payment processing coming soon! Our team will reach out to finalize your order.")}
                 className="rounded-xl bg-accent px-6 py-2.5 text-sm font-medium text-background transition-all hover:brightness-110"
               >
-                Pay Now
+                Checkout
               </button>
             )}
           </div>

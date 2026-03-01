@@ -74,8 +74,8 @@ function generateContourPaths(
       points.push([x, y]);
     }
 
-    const opacity = 0.06 + t * 0.64;
-    const strokeW = 0.4 + t * 0.5;
+    const opacity = Math.round((0.06 + t * 0.64) * 1000) / 1000;
+    const strokeW = Math.round((0.4 + t * 0.5) * 1000) / 1000;
     paths.push({ d: smoothPath(points), opacity, width: strokeW });
   }
 

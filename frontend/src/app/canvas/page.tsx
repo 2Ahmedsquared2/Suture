@@ -33,6 +33,7 @@ function CanvasContent() {
   const imageUrl = searchParams.get("imageUrl") ?? null;
   const promptParam = searchParams.get("prompt") ?? null;
   const savedRef = useRef(false);
+  const pipelineStartedRef = useRef(false);
 
   const [pipelineState, setPipelineState] = useState<PipelineState>("idle");
   const [preprocessedUrl, setPreprocessedUrl] = useState<string | null>(null);
@@ -218,7 +219,8 @@ function CanvasContent() {
   }, [imageId, runSvgConversion]);
 
   useEffect(() => {
-    if (imageId && pipelineState === "idle") {
+    if (imageId && pipelineState === "idle" && !pipelineStartedRef.current) {
+      pipelineStartedRef.current = true;
       runPreprocessing();
     }
   }, [imageId, pipelineState, runPreprocessing]);
@@ -298,7 +300,7 @@ function CanvasContent() {
     }
   };
 
-  const designUrl = preprocessedUrl || (imageUrl ? `${API}${imageUrl}` : null);
+  const designUrl = preprocessedUrl || imageUrl || null;
 
   const isLoading =
     pipelineState === "preprocessing" ||

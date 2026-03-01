@@ -528,8 +528,8 @@ def _image_to_pattern(img: Image.Image) -> tuple[pyembroidery.EmbPattern, list[t
             continue
 
         thread = pyembroidery.EmbThread()
-        thread.set("color", int(cr) << 16 | int(cg) << 8 | int(cb))
-        thread.set("name", f"Thread {ci + 1}")
+        thread.color = int(cr) << 16 | int(cg) << 8 | int(cb)
+        thread.name = f"Thread {ci + 1}"
         pattern.add_thread(thread)
         used_colors.append((int(cr), int(cg), int(cb)))
 

@@ -3,61 +3,11 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 
 type GarmentType = "tshirt" | "crewneck" | "hoodie";
-type GarmentColor = "black" | "gray" | "white";
-type GarmentSide = "front" | "back";
+type GarmentColor = "white" | "gray" | "black";
 
 interface GarmentMockupProps {
   designImageUrl: string;
 }
-
-const FILL: Record<GarmentColor, string> = {
-  black: "#1a1a1a",
-  gray: "#6b6b6b",
-  white: "#e8e8e8",
-};
-
-const STROKE: Record<GarmentColor, string> = {
-  black: "#333",
-  gray: "#888",
-  white: "#bbb",
-};
-
-const PATHS: Record<
-  GarmentType,
-  Record<GarmentSide, { body: string; details?: string[] }>
-> = {
-  tshirt: {
-    front: {
-      body: "M92,48 C110,72 150,72 168,48 L206,62 L248,116 L236,128 L192,102 L192,296 C192,308 184,314 176,314 L84,314 C76,314 68,308 68,296 L68,102 L24,128 L12,116 L54,62 Z",
-    },
-    back: {
-      body: "M92,52 C110,62 150,62 168,52 L206,62 L248,116 L236,128 L192,102 L192,296 C192,308 184,314 176,314 L84,314 C76,314 68,308 68,296 L68,102 L24,128 L12,116 L54,62 Z",
-    },
-  },
-  crewneck: {
-    front: {
-      body: "M96,48 C112,68 148,68 164,48 L200,60 L252,182 L238,192 L192,114 L192,296 C192,308 184,314 176,314 L84,314 C76,314 68,308 68,296 L68,114 L22,192 L8,182 L60,60 Z",
-    },
-    back: {
-      body: "M96,52 C112,58 148,58 164,52 L200,60 L252,182 L238,192 L192,114 L192,296 C192,308 184,314 176,314 L84,314 C76,314 68,308 68,296 L68,114 L22,192 L8,182 L60,60 Z",
-    },
-  },
-  hoodie: {
-    front: {
-      body: "M96,48 C112,68 148,68 164,48 L200,60 L252,182 L238,192 L192,114 L192,296 C192,308 184,314 176,314 L84,314 C76,314 68,308 68,296 L68,114 L22,192 L8,182 L60,60 Z",
-      details: [
-        "M78,54 C78,4 182,4 182,54",
-        "M90,210 Q130,232 170,210",
-        "M120,68 L122,92",
-        "M140,68 L138,92",
-      ],
-    },
-    back: {
-      body: "M96,52 C112,58 148,58 164,52 L200,60 L252,182 L238,192 L192,114 L192,296 C192,308 184,314 176,314 L84,314 C76,314 68,308 68,296 L68,114 L22,192 L8,182 L60,60 Z",
-      details: ["M78,54 C78,0 182,0 182,54"],
-    },
-  },
-};
 
 const GARMENT_LABELS: Record<GarmentType, string> = {
   tshirt: "T-Shirt",
@@ -65,24 +15,72 @@ const GARMENT_LABELS: Record<GarmentType, string> = {
   hoodie: "Hoodie",
 };
 
+const GARMENT_IMAGES: Record<GarmentType, Record<GarmentColor, string>> = {
+  tshirt: {
+    white: "/mockups/tshirt.png",
+    gray: "/mockups/tshirt.png",
+    black: "/mockups/tshirt-black.png",
+  },
+  hoodie: {
+    white: "/mockups/hoodie.png",
+    gray: "/mockups/hoodie.png",
+    black: "/mockups/hoodie.png",
+  },
+  crewneck: {
+    white: "/mockups/crewneck.png",
+    gray: "/mockups/crewneck.png",
+    black: "/mockups/crewneck.png",
+  },
+};
+
+const GARMENT_FILTERS: Record<GarmentType, Record<GarmentColor, string>> = {
+  tshirt: {
+    white: "none",
+    gray: "brightness(0.55)",
+    black: "none",
+  },
+  hoodie: {
+    white: "none",
+    gray: "brightness(0.55)",
+    black: "brightness(0.12)",
+  },
+  crewneck: {
+    white: "saturate(0) brightness(1.45)",
+    gray: "saturate(0) brightness(0.72)",
+    black: "saturate(0) brightness(0.12)",
+  },
+};
+
+const PRINT_ZONES: Record<GarmentType, { x: number; y: number; w: number }> = {
+  tshirt: { x: 28, y: 22, w: 44 },
+  hoodie: { x: 25, y: 38, w: 46 },
+  crewneck: { x: 24, y: 18, w: 48 },
+};
+
+const COLOR_SWATCHES: Record<GarmentColor, string> = {
+  white: "#e8e8e8",
+  gray: "#6b6b6b",
+  black: "#1a1a1a",
+};
+
 export default function GarmentMockup({ designImageUrl }: GarmentMockupProps) {
   const [garmentType, setGarmentType] = useState<GarmentType>("tshirt");
   const [garmentColor, setGarmentColor] = useState<GarmentColor>("black");
-  const [side, setSide] = useState<GarmentSide>("front");
 
-  // Design position/size in SVG viewBox coords (0 0 260 320)
-  const [designX, setDesignX] = useState(88);
-  const [designY, setDesignY] = useState(110);
-  const [designW, setDesignW] = useState(84);
-  const [imageAspect, setImageAspect] = useState(1);
-
-  const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const isResizing = useRef(false);
   const dragStart = useRef({ mx: 0, my: 0, ox: 0, oy: 0 });
-  const resizeStart = useRef({ dist: 0, w: 0, cx: 0, cy: 0 });
+  const resizeStart = useRef({ mx: 0, my: 0, ow: 0 });
 
-  const garment = PATHS[garmentType][side];
+  const printZone = PRINT_ZONES[garmentType];
+  const [designX, setDesignX] = useState(printZone.x + printZone.w * 0.1);
+  const [designY, setDesignY] = useState(printZone.y + 2);
+  const [designW, setDesignW] = useState(printZone.w * 0.7);
+  const [imageAspect, setImageAspect] = useState(1);
+
+  const garmentSrc = GARMENT_IMAGES[garmentType][garmentColor];
+  const garmentFilter = GARMENT_FILTERS[garmentType][garmentColor];
   const designH = designW * imageAspect;
 
   useEffect(() => {
@@ -95,16 +93,21 @@ export default function GarmentMockup({ designImageUrl }: GarmentMockupProps) {
     img.src = designImageUrl;
   }, [designImageUrl]);
 
-  const toSvg = useCallback((clientX: number, clientY: number) => {
-    const svg = svgRef.current;
-    if (!svg) return { x: 0, y: 0 };
-    const pt = svg.createSVGPoint();
-    pt.x = clientX;
-    pt.y = clientY;
-    const ctm = svg.getScreenCTM();
-    if (!ctm) return { x: 0, y: 0 };
-    const s = pt.matrixTransform(ctm.inverse());
-    return { x: s.x, y: s.y };
+  useEffect(() => {
+    const pz = PRINT_ZONES[garmentType];
+    setDesignX(pz.x + pz.w * 0.1);
+    setDesignY(pz.y + 2);
+    setDesignW(pz.w * 0.7);
+  }, [garmentType]);
+
+  const toPercent = useCallback((clientX: number, clientY: number) => {
+    const el = containerRef.current;
+    if (!el) return { x: 0, y: 0 };
+    const rect = el.getBoundingClientRect();
+    return {
+      x: ((clientX - rect.left) / rect.width) * 100,
+      y: ((clientY - rect.top) / rect.height) * 100,
+    };
   }, []);
 
   const handleDesignDown = useCallback(
@@ -114,10 +117,10 @@ export default function GarmentMockup({ designImageUrl }: GarmentMockupProps) {
       isDragging.current = true;
       const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
       const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
-      const pt = toSvg(clientX, clientY);
+      const pt = toPercent(clientX, clientY);
       dragStart.current = { mx: pt.x, my: pt.y, ox: designX, oy: designY };
     },
-    [toSvg, designX, designY]
+    [toPercent, designX, designY]
   );
 
   const handleCornerDown = useCallback(
@@ -127,17 +130,10 @@ export default function GarmentMockup({ designImageUrl }: GarmentMockupProps) {
       isResizing.current = true;
       const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
       const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
-      const pt = toSvg(clientX, clientY);
-      const cx = designX + designW / 2;
-      const cy = designY + designH / 2;
-      resizeStart.current = {
-        dist: Math.hypot(pt.x - cx, pt.y - cy) || 1,
-        w: designW,
-        cx,
-        cy,
-      };
+      const pt = toPercent(clientX, clientY);
+      resizeStart.current = { mx: pt.x, my: pt.y, ow: designW };
     },
-    [toSvg, designX, designY, designW, designH]
+    [toPercent, designW]
   );
 
   useEffect(() => {
@@ -146,7 +142,7 @@ export default function GarmentMockup({ designImageUrl }: GarmentMockupProps) {
         "touches" in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
       const clientY =
         "touches" in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
-      const pt = toSvg(clientX, clientY);
+      const pt = toPercent(clientX, clientY);
 
       if (isDragging.current) {
         setDesignX(dragStart.current.ox + (pt.x - dragStart.current.mx));
@@ -154,14 +150,9 @@ export default function GarmentMockup({ designImageUrl }: GarmentMockupProps) {
       }
 
       if (isResizing.current) {
-        const { dist, w, cx, cy } = resizeStart.current;
-        const curDist = Math.hypot(pt.x - cx, pt.y - cy) || 1;
-        const ratio = curDist / dist;
-        const newW = Math.max(20, Math.min(200, w * ratio));
-        const newH = newW * imageAspect;
+        const delta = pt.x - resizeStart.current.mx;
+        const newW = Math.max(8, Math.min(70, resizeStart.current.ow + delta));
         setDesignW(newW);
-        setDesignX(cx - newW / 2);
-        setDesignY(cy - newH / 2);
       }
     };
 
@@ -180,19 +171,13 @@ export default function GarmentMockup({ designImageUrl }: GarmentMockupProps) {
       window.removeEventListener("touchmove", onMove);
       window.removeEventListener("touchend", onUp);
     };
-  }, [toSvg, imageAspect]);
+  }, [toPercent]);
 
-  const cornerSize = 5;
-  const corners = [
-    { x: designX, y: designY },
-    { x: designX + designW, y: designY },
-    { x: designX, y: designY + designH },
-    { x: designX + designW, y: designY + designH },
-  ];
+  const cornerSize = "8px";
 
   return (
     <div className="flex flex-col items-center gap-4">
-      {/* Garment type */}
+      {/* Garment type selector */}
       <div className="flex items-center gap-1 rounded-lg bg-white/4 p-1">
         {(["tshirt", "crewneck", "hoodie"] as GarmentType[]).map((t) => (
           <button
@@ -209,120 +194,124 @@ export default function GarmentMockup({ designImageUrl }: GarmentMockupProps) {
         ))}
       </div>
 
-      {/* Color + side */}
-      <div className="flex items-center gap-6">
-        <div className="flex items-center gap-2">
-          {(["black", "gray", "white"] as GarmentColor[]).map((c) => (
-            <button
-              key={c}
-              onClick={() => setGarmentColor(c)}
-              className={`h-6 w-6 rounded-full border-2 transition-all ${
-                garmentColor === c ? "border-accent scale-110" : "border-white/20"
-              }`}
-              style={{ backgroundColor: FILL[c] }}
-              title={c}
-            />
-          ))}
-        </div>
-
-        <div className="flex items-center gap-1 rounded-lg bg-white/4 p-1">
-          {(["front", "back"] as GarmentSide[]).map((s) => (
-            <button
-              key={s}
-              onClick={() => setSide(s)}
-              className={`rounded-md px-3 py-1 text-xs capitalize transition-all ${
-                side === s
-                  ? "bg-white/8 text-accent"
-                  : "text-foreground/40 hover:text-foreground/60"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Garment SVG with design overlay */}
-      <svg
-        ref={svgRef}
-        viewBox="0 0 260 320"
-        className="w-full max-w-xs select-none"
-        style={{ maxHeight: "52vh" }}
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <defs>
-          <clipPath id="garment-clip">
-            <path d={garment.body} />
-          </clipPath>
-        </defs>
-
-        {/* Details behind body (hood, etc.) */}
-        {garment.details?.map((d, i) => (
-          <path
-            key={`detail-${i}`}
-            d={d}
-            fill={i === 0 ? FILL[garmentColor] : "none"}
-            stroke={STROKE[garmentColor]}
-            strokeWidth="1.5"
-            strokeLinecap="round"
+      {/* Color selector */}
+      <div className="flex items-center gap-2">
+        {(["white", "gray", "black"] as GarmentColor[]).map((c) => (
+          <button
+            key={c}
+            onClick={() => setGarmentColor(c)}
+            className={`h-6 w-6 rounded-full border-2 transition-all ${
+              garmentColor === c ? "border-accent scale-110" : "border-white/20"
+            }`}
+            style={{ backgroundColor: COLOR_SWATCHES[c] }}
+            title={c}
           />
         ))}
+      </div>
 
-        {/* Garment body */}
-        <path
-          d={garment.body}
-          fill={FILL[garmentColor]}
-          stroke={STROKE[garmentColor]}
-          strokeWidth="1.5"
+      {/* Garment with design overlay */}
+      <div
+        ref={containerRef}
+        className="relative w-full max-w-sm select-none"
+        style={{ maxHeight: "56vh" }}
+      >
+        {/* Garment photo */}
+        <img
+          src={garmentSrc}
+          alt={`${garmentColor} ${garmentType}`}
+          className="pointer-events-none mx-auto block h-auto w-full select-none object-contain"
+          style={{
+            filter: garmentFilter,
+            maxHeight: "56vh",
+          }}
+          draggable={false}
         />
 
-        {/* Design image clipped to garment */}
-        <g clipPath="url(#garment-clip)">
-          <image
-            href={designImageUrl}
-            x={designX}
-            y={designY}
-            width={designW}
-            height={designH}
-            preserveAspectRatio="xMidYMid meet"
-            style={{ cursor: "move" }}
+        {/* Design overlay — masked to garment silhouette */}
+        <div
+          className="absolute inset-0"
+          style={{
+            WebkitMaskImage: `url(${garmentSrc})`,
+            maskImage: `url(${garmentSrc})`,
+            WebkitMaskSize: "contain",
+            maskSize: "contain",
+            WebkitMaskRepeat: "no-repeat",
+            maskRepeat: "no-repeat",
+            WebkitMaskPosition: "center",
+            maskPosition: "center",
+          }}
+        >
+          <img
+            src={designImageUrl}
+            alt="design"
+            draggable={false}
+            className="absolute select-none"
+            style={{
+              left: `${designX}%`,
+              top: `${designY}%`,
+              width: `${designW}%`,
+              mixBlendMode: garmentColor === "black" ? "screen" : "multiply",
+              opacity: 0.92,
+              cursor: "move",
+            }}
             onMouseDown={handleDesignDown}
             onTouchStart={handleDesignDown}
           />
-        </g>
+        </div>
 
         {/* Bounding box */}
-        <rect
-          x={designX}
-          y={designY}
-          width={designW}
-          height={designH}
-          fill="none"
-          stroke="#e97319"
-          strokeWidth="0.8"
-          strokeDasharray="3 2"
-          opacity="0.6"
-          pointerEvents="none"
+        <div
+          className="pointer-events-none absolute"
+          style={{
+            left: `${designX}%`,
+            top: `${designY}%`,
+            width: `${designW}%`,
+            height: `${designH}%`,
+            border: "1px dashed rgba(233, 115, 25, 0.5)",
+            borderRadius: "2px",
+          }}
         />
 
         {/* Corner handles */}
-        {corners.map((c, i) => (
-          <rect
+        {[
+          { left: `${designX}%`, top: `${designY}%`, tx: "-50%", ty: "-50%" },
+          {
+            left: `${designX + designW}%`,
+            top: `${designY}%`,
+            tx: "-50%",
+            ty: "-50%",
+          },
+          {
+            left: `${designX}%`,
+            top: `${designY + designH}%`,
+            tx: "-50%",
+            ty: "-50%",
+          },
+          {
+            left: `${designX + designW}%`,
+            top: `${designY + designH}%`,
+            tx: "-50%",
+            ty: "-50%",
+          },
+        ].map((pos, i) => (
+          <div
             key={i}
-            x={c.x - cornerSize / 2}
-            y={c.y - cornerSize / 2}
-            width={cornerSize}
-            height={cornerSize}
-            rx="1"
-            fill="#e97319"
-            stroke="#0a0a0a"
-            strokeWidth="0.5"
-            style={{ cursor: "nwse-resize" }}
+            className="absolute rounded-sm"
+            style={{
+              left: pos.left,
+              top: pos.top,
+              width: cornerSize,
+              height: cornerSize,
+              transform: `translate(${pos.tx}, ${pos.ty})`,
+              backgroundColor: "#e97319",
+              border: "1px solid rgba(0,0,0,0.3)",
+              cursor: "nwse-resize",
+            }}
             onMouseDown={handleCornerDown}
             onTouchStart={handleCornerDown}
           />
         ))}
-      </svg>
+      </div>
 
       <p className="text-xs text-foreground/25">
         Drag to move · Drag corners to resize

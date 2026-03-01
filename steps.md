@@ -77,10 +77,12 @@ Before conversion, preprocess the approved image to maximize trace quality:
 
 ---
 
-## Step 8: Delivery
+## Step 8: Delivery ✅
 
-- Return the final `.dst` file to the frontend
-- Display a success screen with a download button
+- ✅ Return the final `.dst` file to the frontend
+- ✅ Display a success screen with a download button ("Download .DST File" orange CTA)
+- ✅ Show stitch stats (count, dimensions, thread count), thread color swatches, and AI review badges
+- ✅ Manufacturing quote form ("Want these manufactured?") with garment picker + quantity + inline pricing
 - Optionally show a preview render of the DST so the user can see the stitch layout before downloading
 
 ---
@@ -88,8 +90,8 @@ Before conversion, preprocess the approved image to maximize trace quality:
 ## Step 9: Frontend Polish
 
 - Wire all steps to the UI per the design in `ui.png`
-- Implement loading states for each pipeline stage (image gen, SVG conversion, DST conversion, OpenCLAW checks)
-- Handle all error states gracefully (bad image quality, failed generation, conversion errors)
+- ✅ Implement loading states for each pipeline stage (preprocessing, SVG conversion, SVG review, DST conversion, DST review)
+- ✅ Handle all error states gracefully (bad image quality, failed generation, conversion errors)
 - Ensure the dark theme, orange accents, and Suture branding are consistent throughout
 
 ---
@@ -100,3 +102,13 @@ Before conversion, preprocess the approved image to maximize trace quality:
 - Identify any common failure points in the SVG trace or DST conversion and tune accordingly
 - Clean up API error handling and edge cases
 - Prepare a demo flow for the hackathon presentation
+
+---
+
+## Unused Jarvis Skill — Manufacturing Quote (Real Pricing Engine)
+
+Jarvis has a **real embroidery pricing engine** that can calculate actual production costs. Currently our `/manufacturing-quote` endpoint uses a placeholder formula. To connect:
+
+- Send a Discord message to `@Jarvis` with garment type, stitch count, and quantity
+- Or call Jarvis's `embroidery-pricing/pricing-engine.py` directly
+- Wire up when ready to replace the placeholder pricing

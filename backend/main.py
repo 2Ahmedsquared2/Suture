@@ -98,11 +98,18 @@ async def generate_image(req: GenerateRequest):
     if not prompt:
         raise HTTPException(status_code=400, detail="Prompt cannot be empty.")
 
+    embroidery_prompt = (
+        "Create a simple, bold, flat design with minimal fine detail and high contrast, "
+        "suitable for embroidery and SVG tracing. Use solid filled shapes, avoid gradients, "
+        "thin lines, and photorealistic textures. Keep the design clean with few colors. "
+        f"Subject: {prompt}"
+    )
+
     try:
         client = get_gemini_client()
         response = client.models.generate_images(
             model="imagen-3.0-generate-002",
-            prompt=prompt,
+            prompt=embroidery_prompt,
             config=types.GenerateImagesConfig(number_of_images=1),
         )
 

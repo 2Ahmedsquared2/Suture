@@ -38,11 +38,15 @@ export default function BuildPage() {
     setFlowState("loading");
 
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60_000);
       const res = await fetch(`${API}/generate-image`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: text }),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -54,7 +58,11 @@ export default function BuildPage() {
       setPreviewUrl(`${API}${data.image_url}`);
       setFlowState("preview");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setError("Generation timed out. Please try again.");
+      } else {
+        setError(err instanceof Error ? err.message : "Something went wrong.");
+      }
       setFlowState("idle");
     }
   };

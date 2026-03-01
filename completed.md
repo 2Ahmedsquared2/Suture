@@ -202,13 +202,21 @@ Converts the preprocessed image into a machine-ready `.dst` embroidery file usin
 ### Backend — `POST /review-svg`
 
 - Accepts `{ svg_id: string, image_id: string }` — the generated SVG and its preprocessed source image
-- Sends both files to the Discord channel via webhook, mentioning the OpenCLAW agent (@Jarvis)
+- Sends both files to the Discord channel via webhook, mentioning the OpenCLAW agent (`@Jarvis`, user ID `1477635385608765440`)
 - Message includes review instructions: check for excess nodes, shapes too fine to stitch, color problems, trace artifacts
-- Polls the Discord channel every 5 seconds for up to 5 minutes for the agent's reply
+- Polls the Discord channel every 5 seconds for up to 5 minutes for the agent's reply using a Discord bot token
 - **If agent responds with an improved SVG attachment:** downloads and saves the improved SVG, returns its ID/URL
-- **If agent responds with text only (approval):** returns the original SVG as approved
+- **If agent responds with text only (approval):** returns the original SVG as approved, captures feedback
 - **If timeout (5 min) or agent unreachable:** gracefully falls back to the original SVG with a status note
 - Returns `{ svg_id, svg_url, reviewed: bool, agent_feedback: string | null }`
+
+### Integration — Tested & Confirmed
+
+- **Webhook send:** 200 OK — files delivered to Discord channel with `@Jarvis` mention resolved
+- **Bot token read:** 200 OK — can read all messages from the channel via Discord API v10
+- **Full round-trip tested:** send files → Jarvis responds in ~55 seconds with detailed analysis (color count, stitch estimate, complexity rating, quality issues, improvement notes)
+- **File attachment:** Jarvis can sometimes attach improved SVGs (observed 1 real `suture_improved.svg` attachment at 726 bytes); text-only responses are more common
+- All three response cases handled gracefully in code
 
 ### Frontend — `/canvas` Page Update
 
@@ -226,7 +234,7 @@ Converts the preprocessed image into a machine-ready `.dst` embroidery file usin
 ### Backend — `POST /review-dst`
 
 - Accepts `{ dst_id: string, svg_id: string }` — the generated DST and the (reviewed) SVG
-- Sends both files to the Discord channel via webhook, mentioning the OpenCLAW agent (@Jarvis)
+- Sends both files to the Discord channel via webhook, mentioning the OpenCLAW agent (`@Jarvis`)
 - Message includes review instructions: check for bad jump stitches, incorrect stitch density, elements too small to stitch, color stop order, underlay problems
 - Polls the Discord channel every 5 seconds for up to 5 minutes
 - Same response handling as Step 5: download improved DST if attached, or fall back to original
@@ -250,7 +258,7 @@ Converts the preprocessed image into a machine-ready `.dst` embroidery file usin
 - Returns a placeholder estimated quote with unit price, total price, turnaround days, and notes
 - Pricing based on garment base cost + stitch count surcharge + thread color surcharge
 - Volume discounts at 25+, 50+, 100+ unit thresholds
-- Not connected to real pricing engine yet — placeholder formula for demo purposes
+- **Not connected to Jarvis's real pricing engine yet** — placeholder formula for demo purposes
 - Supports garments: t-shirt, hoodie, hat, polo, jacket, tote
 
 ### Frontend — `/canvas` Page Update
@@ -265,5 +273,20 @@ Converts the preprocessed image into a machine-ready `.dst` embroidery file usin
 
 ### Environment Variables Added
 - `DISCORD_WEBHOOK_URL` — Discord webhook for sending files to the agent channel
-- `DISCORD_BOT_TOKEN` — Bot token for reading agent responses from the channel
+- `DISCORD_BOT_TOKEN` — Bot token for reading agent responses from the channel (created via Discord Developer Portal)
 - `DISCORD_CHANNEL_ID` — Target Discord channel where the agent listens
+
+### Discord Integration Module — `backend/discord_integration.py`
+- `send_files_to_agent()` — sends message + file attachments via Discord webhook, mentions `@Jarvis`
+- `poll_for_agent_response()` — polls channel via bot token every 5s for up to 5 min
+- `download_file()` — downloads improved files from Discord CDN attachment URLs
+
+---
+
+## Unused Jarvis Skill — Manufacturing Quote (Real Pricing Engine)
+
+Jarvis has a **real embroidery pricing engine** (`embroidery-pricing/pricing-engine.py`) that can calculate actual production costs based on garment type, stitch count, and quantity. This is currently not connected — our `/manufacturing-quote` endpoint uses a placeholder formula. To connect it:
+
+- Send a Discord message to `@Jarvis` requesting a manufacturing quote with the design details
+- Or call the pricing engine script directly if running on the same server
+- This can be wired up as a future enhancement after the core pipeline is stable

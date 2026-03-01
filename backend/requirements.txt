@@ -13,3 +13,7 @@ starlette==0.52.1
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 uvicorn==0.41.0
+google-genai>=1.0.0
+Pillow>=10.0.0
+numpy>=1.26.0
+rembg>=2.0.50

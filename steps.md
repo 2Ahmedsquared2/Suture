@@ -1,41 +1,42 @@
 # Suture — Build Steps
 
-## Step 1: Project Setup
+## Step 1: Project Setup ✅
 
-- Initialize a Next.js + TypeScript project for the frontend
-- Initialize a Python + FastAPI project for the backend
-- Set up CORS and a basic health check endpoint to confirm the two services can communicate
-- Configure environment variables for Nana Banana (Gemini) API keys and any OpenCLAW credentials
+- ✅ Initialize a Next.js + TypeScript project for the frontend
+- ✅ Initialize a Python + FastAPI project for the backend
+- ✅ Set up CORS and a basic health check endpoint to confirm the two services can communicate
+- ✅ Configure environment variables for Nana Banana (Gemini) API keys and any OpenCLAW credentials
 
 ---
 
-## Step 2: Input Handling — Text or Image
+## Step 2: Input Handling — Text or Image ✅
 
 Build the landing/input page where users choose their input type.
 
 **Text path:**
-- User types a prompt into the input field
-- Frontend sends the prompt to the backend `/generate-image` endpoint
-- Backend calls **Nana Banana** (Gemini text-to-image) and returns the generated image
-- Frontend displays the image to the user with three options: **Approve**, **Regenerate**, or **Re-prompt**
-- Loop continues until the user approves
+- ✅ User types a prompt into the input field
+- ✅ Frontend sends the prompt to the backend `/generate-image` endpoint
+- ✅ Backend calls **Nana Banana** (Gemini text-to-image) and returns the generated image
+- ✅ Frontend displays the image to the user with three options: **Approve**, **Regenerate**, or **Re-prompt**
+- ✅ Loop continues until the user approves
 
 **Image upload path:**
-- User uploads an image file
-- Backend validates image quality (resolution, clarity, noise level)
-- If quality is insufficient, return an error message prompting the user to upload a better image
-- If quality passes, proceed to the next step
+- ✅ User uploads an image file
+- ✅ Backend validates image quality (resolution, clarity, noise level)
+- ✅ Auto-enhancement: if quality is insufficient, backend attempts to fix (upscale, sharpen, boost contrast)
+- ✅ If still insufficient after enhancement, return an error message prompting the user to upload a better image
+- ✅ If quality passes (original or enhanced), proceed to the next step
 
 ---
 
-## Step 3: Image Preprocessing
+## Step 3: Image Preprocessing ✅
 
 Before conversion, preprocess the approved image to maximize trace quality:
 
-- Remove background (if applicable)
-- Increase contrast and simplify colors
-- Resize/normalize to a consistent resolution
-- The goal is a clean, flat, high-contrast image that will trace well into SVG
+- ✅ Remove background (if applicable)
+- ✅ Increase contrast and simplify colors
+- ✅ Resize/normalize to a consistent resolution
+- ✅ The goal is a clean, flat, high-contrast image that will trace well into SVG
 
 ---
 

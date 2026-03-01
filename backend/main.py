@@ -120,7 +120,7 @@ async def generate_image(req: GenerateRequest):
     try:
         client = get_gemini_client()
         response = client.models.generate_content(
-            model="gemini-2.5-flash-preview-image-generation",
+            model="gemini-2.5-flash-image",
             contents=embroidery_prompt,
             config=GenerateContentConfig(
                 response_modalities=[Modality.IMAGE, Modality.TEXT],

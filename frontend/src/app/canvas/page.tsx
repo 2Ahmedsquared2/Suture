@@ -464,11 +464,7 @@ function CanvasContent() {
                 </div>
               )}
 
-              {agentFeedback && (
-                <p className="max-w-md text-center text-xs italic text-foreground/30">
-                  &ldquo;{agentFeedback}&rdquo;
-                </p>
-              )}
+              {/* Agent feedback hidden from end users */}
 
               {/* Action buttons */}
               <div className="flex items-center gap-3">
